@@ -1,0 +1,156 @@
+<?php
+
+function noclass_form_alter(&$form, &$form_state, $form_id) {
+//drupal_set_message(print_r($form_id, true));
+  if ($form_id == 'user_register_form' || $form_id == 'user_profile_form' && isset($form['profile_main'])) {
+    
+        array_unshift($form['#validate'], 'noclass_mobile_validation');
+  
+  }
+  elseif ($form_id == 'registration_entity_settings_form') {
+  $form['status']['#access'] = FALSE;
+  $form['capacity']['#access'] = FALSE;
+  $form['reminder']['#access'] = FALSE;
+  $form['settings']['#access'] = FALSE;
+  $form['scheduling']['open']['#required'] = TRUE;
+  $form['scheduling']['close']['#required'] = TRUE;
+  watchdog("form", "<pre>" . print_r($form, true) . "</pre>");
+  }
+  
+     /* if($form_id == 'sms_user_settings_add_form') {
+  //drupal_set_message("<pre>". print_r($form, true) . "</pre>");
+  $form['#submit'][] = 'noclass_sms_submit';
+  }*/
+  
+    if($form_id == 'sms_user_settings_confirm_form') {
+    unset($form['confirm_code']);
+    unset($form['submit']);
+    $form['confirm']['#access'] = user_access('edit own sms number');
+    $form['confirm']['#value'] = 'Confirm saved number';
+  }
+  
+       if ($form_id == 'user_register_form') {
+        //watchdog("user register form", "<pre>". print_r($form, true) . "</pre>");
+    //$form['#submit'][] = 'conduit_registration_formalter_submit';
+    $form['#submit'][] = 'noclass_sms_save';
+    $form['#submit'][] = 'noclass_sms_submit';
+  }
+  
+      if($form_id == 'sms_user_settings_add_form') {
+  //drupal_set_message("<pre>". print_r($form, true) . "</pre>");
+  $form['#submit'][] = 'noclass_sms_submit';
+  //$form['submit'] = 'Save number';
+  }
+  
+  
+}
+
+/*function noclass_mobile_validation($form, &$form_state) {
+ if (strlen($form_state['values']['sms_user']['number']) == 10) {
+   $form_state['values']['sms_user']['number'] = (int) "1" . $form_state['values']['sms_user']['number']; 
+ } 
+  if (!empty($form_state['values']['sms_user']['number']) && strlen($form_state['values']['sms_user']['number']) != 11) {
+    form_set_error('sms_user','Mobile number must be valid and include area code');
+  }
+}*/
+
+function noclass_sms_save($form, &$form_state) {
+      $account = user_load($form['#user']->uid);    
+            $data = array(
+      'number' => $form['#user']->sms_user['number'],
+      'status' => SMS_USER_CONFIRMED,
+      'gateway' => variable_get('sms_default_gateway'),
+    );
+
+    user_save($account, array('sms_user' => $data), 'mobile');
+}
+
+function noclass_sms_submit($form, &$form_state) {
+  
+  if(!isset($form['number']['#value'])) {
+  $number = $form['#user']->sms_user['number'];
+}
+elseif (isset($form['number']['#value'])) {
+$number = $form['number']['#value'];
+}
+if(!isset($form_state['build_info']['args'][0]->name)) {
+  $first_name = $form['#user']->name;
+}
+elseif(isset($form_state['build_info']['args'][0]->name)) {
+  $first_name = $form_state['build_info']['args'][0]->name;
+}
+$settings = variable_get('sms_optit_settings');
+$keywordId = $settings['sms_optit_keyword_id'];
+
+
+//Create the connection handle
+$curl_conn = curl_init();
+
+$subscribe  = "https://api.optitmobile.com/1/keywords/".$keywordId ."/subscriptions.xml";
+$postVars = "phone=".$number."&first_name=".$first_name."&last_name=noclass";
+$username = $settings['sms_optit_username']; //username
+$password = $settings['sms_optit_password']; //password
+
+watchdog("not working subscription", "<pre>" . print_r($subscribe, true) . "</pre>");
+watchdog("number", "<pre>" . print_r($number, true) . "</pre>");
+watchdog("postVars", "<pre>" . print_r($postVars, true) . "</pre>");
+
+//Set cURL options
+curl_setopt($curl_conn, CURLOPT_URL, $subscribe); //URL to connect to
+curl_setopt($curl_conn, CURLOPT_POST, 1); //Use POST method
+curl_setopt($curl_conn, CURLOPT_POSTFIELDS, $postVars); //Use POST method
+curl_setopt($curl_conn, CURLOPT_HTTPAUTH, CURLAUTH_BASIC); //Use basic authentication
+curl_setopt($curl_conn, CURLOPT_USERPWD, $username.":".$password); //Set u/p
+curl_setopt($curl_conn, CURLOPT_RETURNTRANSFER, 1); //Return the result as string
+
+// Result from querying URL. Will parse as xml
+$output = curl_exec($curl_conn);
+
+watchdog("output", print_r($output, true));
+
+// close cURL resource.
+curl_close($curl_conn);
+
+watchdog("form on submit", "<pre>" . print_r($form, true) . "</pre>");
+}
+
+function noclass_mobile_validation($form, &$form_state) {
+  if(isset($form_state['values']['sms_user'])) {
+ if (strlen($form_state['values']['sms_user']['number']) == 10) {
+   $form_state['values']['sms_user']['number'] = (int) "1" . $form_state['values']['sms_user']['number']; 
+ } 
+  if (!empty($form_state['values']['sms_user']['number']) && strlen($form_state['values']['sms_user']['number']) != 11) {
+    form_set_error('sms_user','Mobile number must be valid and include area code');
+  }
+}
+}
+/*$number = $form['number']['#value'];
+$settings = variable_get('sms_optit_settings');
+$keywordId = $settings['sms_optit_keyword_id'];
+
+//Create the connection handle
+$curl_conn = curl_init();
+
+$subscribe  = "https://api.optitmobile.com/1/keywords/".$keywordId ."/subscriptions.xml";
+$postVars = "phone=".$number;
+$username = $settings['sms_optit_username']; //username
+$password = $settings['sms_optit_password']; //password
+
+
+//Set cURL options
+curl_setopt($curl_conn, CURLOPT_URL, $subscribe); //URL to connect to
+curl_setopt($curl_conn, CURLOPT_POST, 1); //Use POST method
+curl_setopt($curl_conn, CURLOPT_POSTFIELDS, $postVars); //Use POST method
+curl_setopt($curl_conn, CURLOPT_HTTPAUTH, CURLAUTH_BASIC); //Use basic authentication
+curl_setopt($curl_conn, CURLOPT_USERPWD, $username.":".$password); //Set u/p
+curl_setopt($curl_conn, CURLOPT_RETURNTRANSFER, 1); //Return the result as string
+
+// Result from querying URL. Will parse as xml
+$output = curl_exec($curl_conn);
+
+watchdog("output", print_r($output, true));
+
+// close cURL resource.
+curl_close($curl_conn);
+
+//watchdog("form on submit", "<pre>" . print_r($form, true) . "</pre>");*/

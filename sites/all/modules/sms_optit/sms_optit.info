@@ -1,0 +1,8 @@
+name = "OptIt"
+description = "Allows the SMS Framework to use optit.com as a gateway."
+package = SMS Framework
+dependencies[] = sms
+core = 7.x
+
+files[] = sms_optit.module
+
