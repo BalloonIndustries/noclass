@@ -107,7 +107,7 @@
   $header_watermark_style = '';
   $header_watermark = theme_get_setting('header_watermark');
   if($header_watermark) {
-    $header_watermark_style = 'background-image: url(/' . drupal_get_path('theme', 'mayo') . '/images/pat-' . $header_watermark . '.png);';
+    $header_watermark_style = 'background-image: url(' . url(drupal_get_path('theme', 'mayo') . '/images/pat-' . $header_watermark . '.png') . ');';
   }
 
   $logo_style = '';
@@ -153,7 +153,10 @@
       $page['footer_column_second'] ||
       $page['footer_column_third'] ||
       $page['footer_column_fourth']) {
-    drupal_add_js(drupal_get_path('theme', 'mayo') . '/js/mayo-columns.js');
+    drupal_add_js(drupal_get_path('theme', 'mayo') . '/js/mayo-columns.js',
+      array('type'=>'file',
+        'scope'=>'footer',
+      ));
   }
 ?>
 

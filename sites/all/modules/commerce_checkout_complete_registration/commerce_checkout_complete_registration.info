@@ -1,12 +1,15 @@
 name = Commerce Checkout Complete Registration
 description = Registration Confirmation for Anonymous checkouts.
 core = 7.x
-package = Commerce (Contrib)
+package = Commerce (contrib)
 project = commerce_checkout_complete_registration
 
-; Information added by Drupal.org packaging script on 2014-07-24
-version = "7.x-1.1"
+; Dependencies
+dependencies[] = commerce_checkout
+
+; Information added by Drupal.org packaging script on 2015-02-19
+version = "7.x-1.3"
 core = "7.x"
 project = "commerce_checkout_complete_registration"
-datestamp = "1406198328"
+datestamp = "1424360593"
 

@@ -23,7 +23,7 @@ function commerce_checkout_complete_registration_commerce_checkout_pane_info() {
   $checkout_panes['commerce_checkout_complete_registration'] = array(
     'title' => t('Create account for anonymous checkout'),
     'base' => 'commerce_checkout_complete_registration_confirmation_pane',
-    'page' => 'complete'
+    'page' => 'complete',
   );
 
   return $checkout_panes;
@@ -90,7 +90,7 @@ function commerce_checkout_complete_registration_confirmation_pane_checkout_form
   $pane_form = array();
   global $user;
   // Nothing to do for the authenticated users, or existing.
-  if ($user->uid || user_load_by_mail($order->mail)) {
+  if ($user->uid || empty($order->mail) || (!empty($order->mail) && user_load_by_mail($order->mail))) {
     return $pane_form;
   }
 
@@ -118,6 +118,7 @@ function commerce_checkout_complete_registration_confirmation_pane_checkout_form
       '#size' => 25,
       '#description' => t('Provide a password for the new account in both fields.'),
       '#required' => TRUE,
+      '#element_validate' => array('commerce_checkout_complete_registration_pane_checkout_form_pass_validate'),
     );
   }
 
@@ -125,17 +126,15 @@ function commerce_checkout_complete_registration_confirmation_pane_checkout_form
     '#type' => 'submit',
     '#submit' => array('commerce_checkout_complete_registration_confirmation_pane_checkout_form_submit'),
     '#value' => t('Create my account'),
-    '#element_validate' => array('commerce_checkout_complete_registration_pane_checkout_form_validate'),
   );
   $form_state['#pane'] = $checkout_pane;
-
   return $pane_form;
 }
 
 /**
  * Validate callback for the checkout pane form.
  */
-function commerce_checkout_complete_registration_pane_checkout_form_validate($element, &$form_state, &$form) {
+function commerce_checkout_complete_registration_pane_checkout_form_pass_validate($element, &$form_state, &$form) {
   // LoginToboggan password validation.
   if (module_exists('logintoboggan')) {
     $array_parents = array_slice($element['#parents'], 0, -1);
@@ -156,45 +155,59 @@ function commerce_checkout_complete_registration_pane_checkout_form_validate($el
  */
 function commerce_checkout_complete_registration_confirmation_pane_checkout_form_submit($form, &$form_state) {
   global $user;
+
   $order = $form_state['order'];
 
-  // Set the new account data.
-  $name = $order->mail;
-  $mail = $order->mail;
-  $pass = !empty($form_state['values']['commerce_checkout_complete_registration']['pass']) ? $form_state['values']['commerce_checkout_complete_registration']['pass'] : '';
-  $notify = variable_get('commerce_checkout_registration_account_notification', FALSE);
+  // Nothing to do for the authenticated users, or existing.
+  if (!user_is_logged_in()) {
+    // Set the new account data.
+    $name = $order->mail;
+    $mail = $order->mail;
+    $pass = !empty($form_state['values']['commerce_checkout_complete_registration']['pass']) ? $form_state['values']['commerce_checkout_complete_registration']['pass'] : '';
+    $notify = variable_get('commerce_checkout_registration_account_notification', FALSE);
 
-  // Setup the account fields array and save it as a new user.
-  $fields = array(
-    'name' => $name,
-    'mail' => $mail,
-    'init' => $mail,
-    'pass' => empty($pass) ? user_password(variable_get('commerce_password_length', 8)) : $pass,
-    'roles' => array(),
-    'status' => 1,
-  );
-  $account = user_save('', $fields);
+    // Setup the account fields array and save it as a new user.
+    $fields = array(
+      'name' => $name,
+      'mail' => $mail,
+      'init' => $mail,
+      'pass' => empty($pass) ? user_password(variable_get('commerce_password_length', 8)) : $pass,
+      'roles' => array(),
+      'status' => 1,
+    );
+    $account = user_save('', $fields);
 
-  // Manually set the password so it appears in the e-mail.
-  $account->password = $fields['pass'];
+    // Manually set the password so it appears in the e-mail.
+    $account->password = $fields['pass'];
 
-  // Send the customer their account details if enabled.
-  if ($notify) {
-    global $language;
-    // Send the e-mail through the user module.
-    drupal_mail('user', 'register_no_approval_required', $mail, $language, array('account' => $account), commerce_email_from());
+    // Send the customer their account details if enabled.
+    if ($notify) {
+      global $language;
+      // Send the e-mail through the user module.
+      drupal_mail('user', 'register_no_approval_required', $mail, $language, array('account' => $account), commerce_email_from());
+    }
+    $user = $account;
+
+    // Assign the order to the new user.
+    $order->uid = $user->uid;
+    commerce_order_save($order);
+
+    // Assign the order customer profiles to the new user.
+    $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+    foreach (commerce_info_fields('commerce_customer_profile_reference', 'commerce_order') as $field_name => $field) {
+      if ($order_wrapper->__isset($field_name)) {
+        $customer_profile_wrapper = $order_wrapper->{$field_name};
+        $customer_profile_wrapper->uid = $user->uid;
+        $customer_profile_wrapper->save();
+      }
+    }
+
+    // Use this event to do extra operations with Rules to the new account and/or order.
+    rules_invoke_all('commerce_checkout_complete_registration', $user, $order);
+
+    // Redirect to user order history page.
+    $form_state['redirect'] = 'checkout/' . $order->order_id;
   }
-  $user = $account;
-
-  // Assign the order to the new user.
-  $order->uid = $user->uid;
-  commerce_order_save($order);
-
-  // Use this event to do extra operations with Rules to the new account and/or order.
-  rules_invoke_all('commerce_checkout_complete_registration', $user, $order);
-
-  // Redirect to user order history page.
-  drupal_goto('user/'. $user->uid . '/orders');
 }
 
 /**
